@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<launch>
+
+  <arg name="point_head_action_srv" default="head_controller/point_head_action"/>
+  <arg name="tracks_topic" default="tracks"/>
+  <arg name="lookat_min_duration" default="1.0"/>
+  <arg name="lookat_max_velocity" default="1.0"/>
+
+  <node name="behavior_manager" pkg="helper_robot_user_study" type="behavior_manager_node.py" output="screen">
+    <rosparam subst_value="true">
+      point_head_action_srv: $(arg point_head_action_srv)
+      tracks_topic: $(arg tracks_topic)
+      lookat_min_duration: $(arg lookat_min_duration)
+      lookat_max_velocity: $(arg lookat_max_velocity)
+    </rosparam>
+  </node>
+
+</launch>

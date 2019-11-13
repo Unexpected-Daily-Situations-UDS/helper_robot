@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="success_angle_threshold" default="0.01"/>
+  <arg name="pan_link" default="/head_1_link"/>
+  <arg name="default_pointing_frame" default="/head_2_link"/>
+
+  <group ns="head_controller">
+    <node name="point_head_action" pkg="head_action" type="head_action" output="screen">
+      <rosparam subst_value="true">
+        success_angle_threshold: $(arg success_angle_threshold)
+        pan_link: $(arg pan_link)
+        default_pointing_frame: $(arg default_pointing_frame)
+      </rosparam>
+    </node>
+  </group>
+
+</launch>

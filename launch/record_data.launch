@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="rgb_image_topic" default="xtion/rgb/image_rect_color"/>
+  <arg name="rgb_camera_info_topic" default="xtion/rgb/camera_info"/>
+
+  <arg name="depth_image_topic" default="xtion/depth/image_rect"/>
+  <arg name="depth_camera_info_topic" default="xtion/depth/camera_info"/>
+
+  <node pkg="rosbag" type="record" name="dataset_recorder"
+        args="record -o helper_dataset tf joint_state $(arg rgb_image_topic) $(arg rgb_camera_info_topic) $(arg depth_image_topic) $(arg depth_camera_info_topic)'"/>
+</launch>
