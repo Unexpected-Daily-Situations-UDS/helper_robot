@@ -6,7 +6,7 @@ This repository contains all the ressources to run the user study and record the
 
 ```
 cd uwds3_ws/src
-git clone ...
+git clone https://github.com/uwds3/helper_robot.git
 cd .. & catkin_make
 ```
 

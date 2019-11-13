@@ -3,15 +3,17 @@
 
   <arg name="point_head_action_srv" default="head_controller/point_head_action"/>
   <arg name="tracks_topic" default="tracks"/>
-  <arg name="lookat_min_duration" default="1.0"/>
-  <arg name="lookat_max_velocity" default="1.0"/>
+  <arg name="lookat_min_duration" default="0.7"/>
+  <arg name="lookat_max_velocity" default="0.15"/>
+  <arg name="pointing_frame" default="xtion_rgb_optical_frame"/>
 
-  <node name="behavior_manager" pkg="helper_robot_user_study" type="behavior_manager_node.py" output="screen">
+  <node name="behavior_manager" pkg="helper_robot" type="behavior_manager_node.py" output="screen">
     <rosparam subst_value="true">
       point_head_action_srv: $(arg point_head_action_srv)
       tracks_topic: $(arg tracks_topic)
       lookat_min_duration: $(arg lookat_min_duration)
       lookat_max_velocity: $(arg lookat_max_velocity)
+      pointing_frame: $(arg pointing_frame)
     </rosparam>
   </node>
 

@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>helper_robot_user_study</name>
+  <name>helper_robot</name>
   <version>0.0.0</version>
-  <description>The helper_robot_user_study package</description>
+  <description>The helper_robot package</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag -->
   <!-- Example:  -->
