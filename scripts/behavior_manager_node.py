@@ -4,6 +4,7 @@
 import sys
 import rospy
 import actionlib
+import threading
 import tf2_ros
 import math
 from tf2_ros import Buffer, TransformListener
@@ -11,6 +12,8 @@ from control_msgs.msg import PointHeadAction, PointHeadGoal
 import geometry_msgs
 from geometry_msgs.msg import PointStamped
 from uwds3_msgs.msg import SceneNodeArrayStamped
+from sensor_msgs.msg import Joy
+from geometry_msgs.msg import Twist
 
 
 class BehaviorManager(object):
@@ -21,20 +24,36 @@ class BehaviorManager(object):
 
         rospy.sleep(0.5)
 
-        self.point_head_action_srv = rospy.get_param("~point_head_action_srv", "point_head_action")
+        self.point_head_action_srv = rospy.get_param("~point_head_action_srv", "head_controller/point_head_action")
         self.head_action_client = actionlib.SimpleActionClient(self.point_head_action_srv, PointHeadAction)
 
         self.lookat_min_duration = rospy.get_param("~lookat_min_duration", 0.2)
         self.lookat_max_velocity = rospy.get_param("~lookat_max_velocity", 0.1)
 
+        self.linear_velocity_ratio = rospy.get_param("~linear_velocity_ratio", 0.25)
+        self.angular_velocity_ratio = rospy.get_param("~angular_velocity_ratio", 0.25)
+        assert(self.linear_velocity_ratio != 0.0)
+        assert(self.angular_velocity_ratio != 0.0)
+
         self.pointing_frame = rospy.get_param("~pointing_frame", "")
 
-        self.look_at_min_height = rospy.get_param("~look_at_height", 1.35)
+        self.look_at_min_height = rospy.get_param("~look_at_min_height", 1.35)
+
+        self.last_look_at_point = None
+        self.last_tracked_frame = None
+
+        self.enable_tracking = True
 
         rospy.loginfo("[supervision] Waiting '{}' action server...".format(self.point_head_action_srv))
         if not self.head_action_client.wait_for_server(rospy.Duration(5.0)):
             rospy.logerr("Not able to connect to '{}' action server ! Check that you are connected to the robot, if so check the ROS_MASTER_URI and ROS_IP.".format(self.point_head_action_srv))
             sys.exit()
+
+        self.cmd_vel_publisher = rospy.Publisher("/mobile_base_controller/cmd_vel", Twist, queue_size=1)
+
+        self.joy_topic = rospy.get_param("~joy_topic", "joy")
+        rospy.loginfo("[supervision] Subscribing to '/{}' topic...".format(self.joy_topic))
+        self.track_subscriber = rospy.Subscriber(self.joy_topic, Joy, self.joystick_callback, queue_size=1)
 
         self.tracks_topic = rospy.get_param("~tracks_topic", "tracks")
         rospy.loginfo("[supervision] Subscribing to '/{}' topic...".format(self.tracks_topic))
@@ -49,7 +68,7 @@ class BehaviorManager(object):
         for track in tracks_msg.nodes:
             if track.label == "person" or track.label == "face":
                 if track.is_located is True:
-                    success, t, _ = self.get_transform_from_tf2(self.pointing_frame, track.id)#, time=tracks_msg.header.stamp)
+                    success, t, _ = self.get_transform_from_tf2(self.pointing_frame, track.id)
                     if success is True:
                         dist = math.sqrt(math.pow(t[0], 2)+ math.pow(t[1], 2)+ math.pow(t[2], 2))
                         if min_dist > dist:
@@ -57,17 +76,69 @@ class BehaviorManager(object):
                             min_dist = dist
 
         if track_to_lookat is not None:
-            self.look_at(track_to_lookat)
+            if self.enable_tracking is True:
+                look_at_point = PointStamped()
+                look_at_point.header = track_to_lookat.position.header
+                look_at_point.header.stamp = rospy.Time(0)
+                look_at_point.point = track_to_lookat.position.pose.pose.position
+                self.last_look_at_point = look_at_point
+                self.last_tracked_frame = track_to_lookat.id
+                self.look_at(look_at_point, timeout=self.lookat_min_duration)
 
-    def look_at(self, scene_node):
-        if scene_node.position.header.frame_id != "":
-            look_at_point = PointStamped()
-            look_at_point.header = scene_node.position.header
-            look_at_point.header.stamp = rospy.Time(0)
-            look_at_point.point = scene_node.position.pose.pose.position
-            if scene_node.position.header.frame_id == "odom" or scene_node.position.header.frame_id == "map":
-                if look_at_point.point.z < self.look_at_min_height:
-                    look_at_point.point.z = self.look_at_min_height
+    def joystick_callback(self, joy_msg):
+        if joy_msg.buttons[7] == 1.0: # security check
+            if joy_msg.buttons[0] > 0.0 or joy_msg.buttons[1] > 0.0 or joy_msg.buttons[2] > 0.0:
+                if self.last_look_at_point is not None and self.last_tracked_frame is not None:
+                    # head control mode
+                    self.enable_tracking = False
+
+                    if joy_msg.buttons[1] == 1.0:
+                        # look_at ground
+                        look_at_point = self.last_look_at_point
+                        look_at_point.point.z = 0.0
+                        self.look_at(look_at_point, look_at_height=0.0, timeout=3.0)
+
+                    elif joy_msg.buttons[0] == 1.0:
+                        # look_at left
+                        success, t, _ = self.get_transform_from_tf2(self.pointing_frame, self.last_tracked_frame)
+                        if success is True:
+                            look_at_point = PointStamped()
+                            look_at_point.header.frame_id = self.pointing_frame
+                            look_at_point.point.x = t[0] - 1.0
+                            look_at_point.point.y = t[1]
+                            look_at_point.point.z = t[2]
+                            self.look_at(look_at_point, timeout=3.0)
+                    elif joy_msg.buttons[2] == 1.0:
+                        # look_at right
+                        success, t, _ = self.get_transform_from_tf2(self.pointing_frame, self.last_tracked_frame)
+                        if success is True:
+                            look_at_point = PointStamped()
+                            look_at_point.header.frame_id = self.pointing_frame
+                            look_at_point.point.x = t[0] + 1.0
+                            look_at_point.point.y = t[1]
+                            look_at_point.point.z = t[2]
+                            self.look_at(look_at_point, timeout=3.0)
+
+                    self.enable_tracking = True
+            else:
+                # base control mode
+                # self.enable_tracking = False
+                # look_at_point = PointStamped()
+                # look_at_point.header.frame_id = "base_link"
+                # look_at_point.point.x = 0.0
+                # look_at_point.point.y = 0.0
+                # look_at_point.point.z = 1.0
+                # self.look_at_point(look_at_point)
+
+                command = Twist()
+                command.linear.x = joy_msg.axes[1] * self.linear_velocity_ratio
+                command.angular.z = joy_msg.axes[0] * self.angular_velocity_ratio
+                self.cmd_vel_publisher.publish(command)
+
+    def look_at(self, look_at_point, look_at_height=1.35, timeout=None):
+        if look_at_point.header.frame_id != "":
+            if look_at_point.header.frame_id == "odom" or look_at_point.header.frame_id == "map":
+                look_at_point.point.z = look_at_height
             goal = PointHeadGoal(target=look_at_point,
                                  pointing_axis=geometry_msgs.msg.Vector3(x=0.0, y=0.0, z=1.0),
                                  pointing_frame=self.pointing_frame,
@@ -76,7 +147,10 @@ class BehaviorManager(object):
             rospy.logdebug("[supervision] Send goal : \n{}".format(goal))
             self.head_action_client.send_goal(goal)
             rospy.logdebug("[supervision] Wait for goal result...")
-            self.head_action_client.wait_for_result(rospy.Duration(self.lookat_min_duration))
+            if timeout is None:
+                self.head_action_client.wait_for_result()
+            else:
+                self.head_action_client.wait_for_result(rospy.Duration(timeout))
 
     def get_transform_from_tf2(self, source_frame, target_frame, time=None):
         try:
