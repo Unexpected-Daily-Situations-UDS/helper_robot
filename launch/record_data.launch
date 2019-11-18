@@ -4,10 +4,12 @@
   <arg name="rgb_camera_info_topic" default="xtion/rgb/camera_info"/>
 
   <arg name="depth_image_topic" default="xtion/depth/image_rect"/>
-  <arg name="depth_camera_info_topic" default="xtion/depth/camera_info"/>a
+  <arg name="depth_camera_info_topic" default="xtion/depth/camera_info"/>
+
+  <arg name="recording_folder" default="/media/ysallami/TOSHIBA\ EXT"/>
 
   <arg name="laser_scan_topic" default="scan"/>
 
   <node pkg="rosbag" type="record" name="dataset_recorder"
-        args="record -o helper_dataset tf joint_state $(arg rgb_image_topic) $(arg rgb_camera_info_topic) $(arg depth_image_topic) $(arg depth_camera_info_topic) $(arg laser_scan_topic)"/>
+        args="record -o $(arg recording_folder)/helper_dataset tf tf_static joint_state $(arg rgb_image_topic) $(arg rgb_camera_info_topic) $(arg depth_image_topic) $(arg depth_camera_info_topic) $(arg laser_scan_topic)"/>
 </launch>
