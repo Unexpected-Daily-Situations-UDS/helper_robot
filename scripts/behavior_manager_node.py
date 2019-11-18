@@ -30,12 +30,13 @@ class BehaviorManager(object):
         self.lookat_min_duration = rospy.get_param("~lookat_min_duration", 0.2)
         self.lookat_max_velocity = rospy.get_param("~lookat_max_velocity", 0.1)
 
-        self.linear_velocity_ratio = rospy.get_param("~linear_velocity_ratio", 0.25)
+        self.linear_velocity_ratio = rospy.get_param("~linear_velocity_ratio", 0.15)
         self.angular_velocity_ratio = rospy.get_param("~angular_velocity_ratio", 0.25)
         assert(self.linear_velocity_ratio != 0.0)
         assert(self.angular_velocity_ratio != 0.0)
 
         self.pointing_frame = rospy.get_param("~pointing_frame", "")
+        self.base_frame_id = rospy.get_param("~base_frame_id", "base_footprint")
 
         self.look_at_min_height = rospy.get_param("~look_at_min_height", 1.35)
 
@@ -49,7 +50,7 @@ class BehaviorManager(object):
             rospy.logerr("Not able to connect to '{}' action server ! Check that you are connected to the robot, if so check the ROS_MASTER_URI and ROS_IP.".format(self.point_head_action_srv))
             sys.exit()
 
-        self.cmd_vel_publisher = rospy.Publisher("/mobile_base_controller/cmd_vel", Twist, queue_size=1)
+        self.cmd_vel_publisher = rospy.Publisher("mobile_base_controller/cmd_vel", Twist, queue_size=1)
 
         self.joy_topic = rospy.get_param("~joy_topic", "joy")
         rospy.loginfo("[supervision] Subscribing to '/{}' topic...".format(self.joy_topic))
@@ -62,8 +63,8 @@ class BehaviorManager(object):
         rospy.loginfo("[supervision] Behavior manager ready !")
 
     def observation_callback(self, tracks_msg):
-        track_to_lookat = None
-        min_dist = 10000
+        person_to_lookat = None
+        min_person_dist = 10000
         rospy.logdebug("[supervision] Tracks received, triggering callback...")
         for track in tracks_msg.nodes:
             if track.label == "person" or track.label == "face":
@@ -71,10 +72,11 @@ class BehaviorManager(object):
                     success, t, _ = self.get_transform_from_tf2(self.pointing_frame, track.id)
                     if success is True:
                         dist = math.sqrt(math.pow(t[0], 2)+ math.pow(t[1], 2)+ math.pow(t[2], 2))
-                        if min_dist > dist:
-                            track_to_lookat = track
-                            min_dist = dist
+                        if min_person_dist > dist:
+                            person_to_lookat = track
+                            min_person_dist = dist
 
+        track_to_lookat = person_to_lookat
         if track_to_lookat is not None:
             if self.enable_tracking is True:
                 look_at_point = PointStamped()
@@ -87,53 +89,73 @@ class BehaviorManager(object):
 
     def joystick_callback(self, joy_msg):
         if joy_msg.buttons[7] == 1.0: # security check
-            if joy_msg.buttons[0] > 0.0 or joy_msg.buttons[1] > 0.0 or joy_msg.buttons[2] > 0.0:
-                if self.last_look_at_point is not None and self.last_tracked_frame is not None:
-                    # head control mode
-                    self.enable_tracking = False
+            if joy_msg.buttons[0] > 0.0 or joy_msg.buttons[1] > 0.0 or joy_msg.buttons[2] > 0.0 or joy_msg.buttons[3] > 0.0 or joy_msg.buttons[4] > 0.0:
+                # head control mode
+                self.enable_tracking = False
 
-                    if joy_msg.buttons[1] == 1.0:
-                        # look_at ground
+                if joy_msg.buttons[4] == 1.0:
+                    command = Twist()
+                    command.angular.z = 0.25
+                    self.cmd_vel_publisher.publish(command)
+
+                elif joy_msg.buttons[1] == 1.0:
+                    # look_at ground
+                    if self.last_look_at_point is not None and self.last_tracked_frame is not None:
                         look_at_point = self.last_look_at_point
-                        look_at_point.point.z = 0.0
                         self.look_at(look_at_point, look_at_height=0.0, timeout=3.0)
 
-                    elif joy_msg.buttons[0] == 1.0:
-                        # look_at left
+                elif joy_msg.buttons[0] == 1.0:
+                    # look_at left
+                    if self.last_look_at_point is not None and self.last_tracked_frame is not None:
                         success, t, _ = self.get_transform_from_tf2(self.pointing_frame, self.last_tracked_frame)
                         if success is True:
                             look_at_point = PointStamped()
                             look_at_point.header.frame_id = self.pointing_frame
-                            look_at_point.point.x = t[0] - 1.0
-                            look_at_point.point.y = t[1]
-                            look_at_point.point.z = t[2]
+                            if self.last_tracked_frame == self.base_frame_id:
+                                look_at_point.header.frame_id = self.base_frame_id
+                                look_at_point.point.x = 2.0
+                                look_at_point.point.y = 1.0
+                                look_at_point.point.z = self.look_at_min_height
+                            else:
+                                look_at_point.point.x = t[0] - 1.0
+                                look_at_point.point.y = t[1]
+                                look_at_point.point.z = t[2]
                             self.look_at(look_at_point, timeout=3.0)
-                    elif joy_msg.buttons[2] == 1.0:
-                        # look_at right
+                elif joy_msg.buttons[2] == 1.0:
+                    # look_at right
+                    if self.last_look_at_point is not None and self.last_tracked_frame is not None:
                         success, t, _ = self.get_transform_from_tf2(self.pointing_frame, self.last_tracked_frame)
                         if success is True:
                             look_at_point = PointStamped()
                             look_at_point.header.frame_id = self.pointing_frame
-                            look_at_point.point.x = t[0] + 1.0
-                            look_at_point.point.y = t[1]
-                            look_at_point.point.z = t[2]
+                            if self.last_tracked_frame == self.base_frame_id:
+                                look_at_point.header.frame_id = self.base_frame_id
+                                look_at_point.point.x = 2.0
+                                look_at_point.point.y = -1.0
+                                look_at_point.point.z = self.look_at_min_height
+                            else:
+                                look_at_point.point.x = t[0] + 1.0
+                                look_at_point.point.y = t[1]
+                                look_at_point.point.z = t[2]
                             self.look_at(look_at_point, timeout=3.0)
+                elif joy_msg.buttons[3] == 1.0:
+                    # look forward
+                    look_at_point = PointStamped()
+                    look_at_point.header.frame_id = self.base_frame_id
+                    look_at_point.point.x = 2.0
+                    look_at_point.point.y = 0.0
+                    look_at_point.point.z = self.look_at_min_height
+                    self.last_look_at_point = look_at_point
+                    self.last_tracked_frame = self.base_frame_id
+                    self.look_at(look_at_point, timeout=3.0)
 
-                    self.enable_tracking = True
+                self.enable_tracking = True
             else:
-                # base control mode
-                # self.enable_tracking = False
-                # look_at_point = PointStamped()
-                # look_at_point.header.frame_id = "base_link"
-                # look_at_point.point.x = 0.0
-                # look_at_point.point.y = 0.0
-                # look_at_point.point.z = 1.0
-                # self.look_at_point(look_at_point)
-
                 command = Twist()
                 command.linear.x = joy_msg.axes[1] * self.linear_velocity_ratio
                 command.angular.z = joy_msg.axes[0] * self.angular_velocity_ratio
                 self.cmd_vel_publisher.publish(command)
+                #self.enable_tracking = True
 
     def look_at(self, look_at_point, look_at_height=1.35, timeout=None):
         if look_at_point.header.frame_id != "":
