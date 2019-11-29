@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<launch>
+
+  <arg name="sample_rate" default="16000"/>
+  <arg name="bitrate" default="128"/>
+  <arg name="channels" default="1"/>
+  <arg name="audio_device_front" default="plughw:PAL_ANDREA"/>
+  <arg name="audio_device_rear" default="plughw:ASTRA"/>
+
+  <group ns="audio">
+    <node name="audio_capture_front" pkg="audio_capture" type="audio_capture" required="true" output="screen">
+      <param name="bitrate" value="$(arg bitrate)"/>
+      <param name="device" value="$(arg audio_device_front)"/>
+      <param name="channels" value="$(arg channels)"/>
+      <param name="sample_rate" value="$(arg sample_rate)"/>
+      <remap from="audio" to="audio_front"/>
+    </node>
+
+    <node name="audio_capture_rear" pkg="audio_capture" type="audio_capture" required="true" output="screen">
+      <param name="bitrate" value="$(arg bitrate)"/>
+      <param name="device" value="$(arg audio_device_rear)"/>
+      <param name="channels" value="$(arg channels)"/>
+      <param name="sample_rate" value="$(arg sample_rate)"/>
+      <remap from="audio" to="audio_rear"/>
+    </node>
+  </group>
+
+</launch>
