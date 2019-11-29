@@ -1,15 +1,21 @@
 <?xml version="1.0"?>
 <launch>
+
   <arg name="rgb_image_topic" default="xtion/rgb/image_rect_color"/>
   <arg name="rgb_camera_info_topic" default="xtion/rgb/camera_info"/>
 
   <arg name="depth_image_topic" default="xtion/depth/image_rect"/>
   <arg name="depth_camera_info_topic" default="xtion/depth/camera_info"/>
 
-  <arg name="recording_folder" default="/media/ysallami/TOSHIBA\ EXT"/>
+  <arg name="audio_front_topic" default="audio/audio_front"/>
+  <arg name="audio_rear_topic" default="audio/audio_rear"/>
+
+  <!--<arg name="recording_folder" default="/media/ysallami/Samsung_T5/helper_dataset"/>-->
+  <arg name="recording_folder" default="/media/ysallami/uwds3-dataset/helper_dataset"/>
 
   <arg name="laser_scan_topic" default="scan"/>
 
   <node pkg="rosbag" type="record" name="dataset_recorder"
-        args="record -o $(arg recording_folder)/helper_dataset tf tf_static joint_state $(arg rgb_image_topic) $(arg rgb_camera_info_topic) $(arg depth_image_topic) $(arg depth_camera_info_topic) $(arg laser_scan_topic)"/>
+        args="record -o $(arg recording_folder)/helper_dataset tf tf_static joint_state $(arg rgb_image_topic) $(arg rgb_camera_info_topic) $(arg depth_image_topic) $(arg depth_camera_info_topic) $(arg laser_scan_topic) $(arg audio_front_topic) $(arg audio_rear_topic)"/>
+
 </launch>

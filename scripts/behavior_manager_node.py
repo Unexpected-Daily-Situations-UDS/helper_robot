@@ -4,7 +4,6 @@
 import sys
 import rospy
 import actionlib
-import threading
 import tf2_ros
 import math
 from tf2_ros import Buffer, TransformListener
@@ -30,15 +29,15 @@ class BehaviorManager(object):
         self.lookat_min_duration = rospy.get_param("~lookat_min_duration", 0.2)
         self.lookat_max_velocity = rospy.get_param("~lookat_max_velocity", 0.1)
 
-        self.linear_velocity_ratio = rospy.get_param("~linear_velocity_ratio", 0.15)
-        self.angular_velocity_ratio = rospy.get_param("~angular_velocity_ratio", 0.25)
-        assert(self.linear_velocity_ratio != 0.0)
-        assert(self.angular_velocity_ratio != 0.0)
+        self.max_linear_velocity = rospy.get_param("~linear_velocity_ratio", 0.15)
+        self.max_angular_velocity = rospy.get_param("~angular_velocity_ratio", 0.25)
+        assert(self.max_linear_velocity != 0.0)
+        assert(self.max_angular_velocity != 0.0)
 
         self.pointing_frame = rospy.get_param("~pointing_frame", "")
         self.base_frame_id = rospy.get_param("~base_frame_id", "base_footprint")
 
-        self.look_at_min_height = rospy.get_param("~look_at_min_height", 1.35)
+        self.look_at_min_height = rospy.get_param("~look_at_min_height", 1.0)
 
         self.last_look_at_point = None
         self.last_tracked_frame = None
@@ -47,7 +46,7 @@ class BehaviorManager(object):
 
         rospy.loginfo("[supervision] Waiting '{}' action server...".format(self.point_head_action_srv))
         if not self.head_action_client.wait_for_server(rospy.Duration(5.0)):
-            rospy.logerr("Not able to connect to '{}' action server ! Check that you are connected to the robot, if so check the ROS_MASTER_URI and ROS_IP.".format(self.point_head_action_srv))
+            rospy.logerr("Not able to connect to '{}' action server ! Check that you are connected to the robot, if so check the ROS_MASTER_URI and ROS_IP. If everything is ok, verify that this node do NOT run on a particular namespace.".format(self.point_head_action_srv))
             sys.exit()
 
         self.cmd_vel_publisher = rospy.Publisher("mobile_base_controller/cmd_vel", Twist, queue_size=1)
@@ -152,14 +151,14 @@ class BehaviorManager(object):
                 self.enable_tracking = True
             else:
                 command = Twist()
-                command.linear.x = joy_msg.axes[1] * self.linear_velocity_ratio
-                command.angular.z = joy_msg.axes[0] * self.angular_velocity_ratio
+                command.linear.x = joy_msg.axes[1] * self.max_linear_velocity
+                command.angular.z = joy_msg.axes[0] * self.max_angular_velocity
                 self.cmd_vel_publisher.publish(command)
                 #self.enable_tracking = True
 
     def look_at(self, look_at_point, look_at_height=1.35, timeout=None):
         if look_at_point.header.frame_id != "":
-            if look_at_point.header.frame_id == "odom" or look_at_point.header.frame_id == "map":
+            if look_at_point.header.frame_id == "odom" or look_at_point.header.frame_id == "map" or look_at_point.header.frame_id == "base_footprint":
                 look_at_point.point.z = look_at_height
             goal = PointHeadGoal(target=look_at_point,
                                  pointing_axis=geometry_msgs.msg.Vector3(x=0.0, y=0.0, z=1.0),
